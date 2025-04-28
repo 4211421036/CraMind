@@ -10,7 +10,7 @@ import markdown
 def load_model():
     model_name = "Salesforce/codegen-350M-mono"
     tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
-    tokenizer.pad_token = tokenizer.eos_token  # Set pad token
+    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(model_name)
     return model, tokenizer
 
@@ -29,14 +29,15 @@ def generate_code(model, tokenizer, description, language):
     
     inputs = tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=512)
     
-    # Generate with better configuration
     outputs = model.generate(
         inputs,
-        max_new_tokens=512,  # Gunakan max_new_tokens bukan max_length
+        max_new_tokens=512,
         temperature=0.7,
-        do_sample=True,     # Diperlukan untuk temperature
+        do_sample=True,
         pad_token_id=tokenizer.eos_token_id,
-        attention_mask=inputs.ne(tokenizer.pad_token_id)  # Tambahkan attention mask
+        attention_mask=inputs.ne(tokenizer.pad_token_id),
+        num_beams=2,  # Ditambahkan untuk early_stopping
+        early_stopping=True
     )
     
     code = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -88,54 +89,40 @@ def execute_code(code, language_config, filename):
         return str(error_path), None, str(e)
 
 def generate_explanation(code, language, model, tokenizer):
-    try:
-        prompt = f"""
-        Explain this {language} code in a way that helps beginners understand:
-        
-        {code}
-        
-        Provide the explanation in the following format:
-        1. Overall purpose of the code
-        2. Breakdown of each major section
-        3. Key concepts used
-        4. Example of how to modify or extend it
-        
-        Explanation:
-        """
-        
-        # Encode input dengan pemangkasan
-        inputs = tokenizer.encode(
-            prompt,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512
-        )
-        
-        # Generate explanation dengan konfigurasi yang tepat
-        outputs = model.generate(
-            inputs,
-            max_new_tokens=512,
-            temperature=0.5,
-            do_sample=True,
-            pad_token_id=tokenizer.eos_token_id,
-            attention_mask=inputs.ne(tokenizer.pad_token_id),
-            early_stopping=True
-        )
-        
-        # Decode dan bersihkan output
-        explanation = tokenizer.decode(
-            outputs[0],
-            skip_special_tokens=True
-        ).replace(prompt, "").strip()
-        
-        return explanation
-        
-    except Exception as e:
-        print(f"Error generating explanation: {str(e)}")
-        return f"Could not generate explanation due to error: {str(e)}"
+    prompt = f"""
+    Explain this {language} code in a way that helps beginners understand:
+    
+    {code}
+    
+    Provide the explanation in the following format:
+    1. Overall purpose of the code
+    2. Breakdown of each major section
+    3. Key concepts used
+    4. Example of how to modify or extend it
+    
+    Explanation:
+    """
+    
+    inputs = tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=512)
+    
+    outputs = model.generate(
+        inputs,
+        max_new_tokens=512,
+        temperature=0.5,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id,
+        attention_mask=inputs.ne(tokenizer.pad_token_id),
+        num_beams=2,  # Ditambahkan untuk early_stopping
+        early_stopping=True
+    )
+    
+    explanation = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    explanation = explanation.replace(prompt, "").strip()
+    
+    return explanation
 
 def save_explanation(explanation, filename, language):
-    output_dir = Path("Output/explanations")  # Perbaikan typo: explantions -> explanations
+    output_dir = Path("Output/explanations")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     explanation_path = output_dir / f"{filename}_explanation.md"
@@ -151,29 +138,36 @@ def save_explanation(explanation, filename, language):
     return str(explanation_path)
 
 def main():
-    description = os.getenv("INPUT_DESCRIPTION")
-    language = os.getenv("INPUT_LANGUAGE", "python")
-    filename = os.getenv("INPUT_FILENAME", "generated_code")
-    generate_explanation_flag = os.getenv("INPUT_EXPLAIN", "true").lower() == "true"
-    
-    model, tokenizer = load_model()
-    language_config = get_language_config(language)
-    
-    code = generate_code(model, tokenizer, description, language)
-    
-    output_path, execution_output, error = execute_code(code, language_config, filename)
-    
-    explanation_path = None
-    if generate_explanation_flag:
-        explanation = generate_explanation(code, language, model, tokenizer)
-        explanation_path = save_explanation(explanation, filename, language_config['extension'])
-    
-    print(f"::set-output name=code_path::Output/running/{filename}.{language_config['extension']}")
-    print(f"::set-output name=output_path::{output_path}")
-    if explanation_path:
-        print(f"::set-output name=explanation_path::{explanation_path}")
-    
-    if error:
+    try:
+        description = os.getenv("INPUT_DESCRIPTION")
+        language = os.getenv("INPUT_LANGUAGE", "python")
+        filename = os.getenv("INPUT_FILENAME", "generated_code")
+        generate_explanation_flag = os.getenv("INPUT_EXPLAIN", "true").lower() == "true"
+        
+        model, tokenizer = load_model()
+        language_config = get_language_config(language)
+        
+        code = generate_code(model, tokenizer, description, language)
+        
+        output_path, execution_output, error = execute_code(code, language_config, filename)
+        
+        explanation_path = None
+        if generate_explanation_flag:
+            explanation = generate_explanation(code, language, model, tokenizer)
+            explanation_path = save_explanation(explanation, filename, language_config['extension'])
+        
+        # Ganti set-output dengan environment files
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+            print(f'code_path=Output/running/{filename}.{language_config["extension"]}', file=fh)
+            print(f'output_path={output_path}', file=fh)
+            if explanation_path:
+                print(f'explanation_path={explanation_path}', file=fh)
+        
+        if error:
+            sys.exit(1)
+            
+    except Exception as e:
+        print(f"Error in main: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
