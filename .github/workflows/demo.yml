@@ -6,36 +6,55 @@ jobs:
   generate-and-run:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
       
-      - name: Generate Python codes
-        uses: ./
-        id: python_demo
+      # Untuk testing action lokal sebelum publish
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          description: 'Create a Python program to calculate the area of a circle'
-          language: 'python'
-          filename: 'area_circle'
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install transformers torch markdown huggingface-hub
+      
+      - name: Generate Python code
+        run: |
+          python src/main.py \
+            --description "Buat program Python untuk menghitung luas lingkaran" \
+            --language python \
+            --filename luas_lingkaran
+        id: python_demo
+        env:
+          INPUT_DESCRIPTION: "Buat program Python untuk menghitung luas lingkaran"
+          INPUT_LANGUAGE: "python"
+          INPUT_FILENAME: "luas_lingkaran"
       
       - name: Generate JavaScript code
-        uses: ./
+        run: |
+          python src/main.py \
+            --description "Create a JavaScript function to validate email addresses" \
+            --language javascript \
+            --filename email_validator
         id: js_demo
-        with:
-          description: 'Create a JavaScript function to validate email addresses'
-          language: 'javascript'
-          filename: 'email_validator'
+        env:
+          INPUT_DESCRIPTION: "Create a JavaScript function to validate email addresses"
+          INPUT_LANGUAGE: "javascript"
+          INPUT_FILENAME: "email_validator"
       
       - name: Show results
         run: |
-          echo "Python code generated at: ${{ steps.python_demo.outputs.code_path }}"
-          echo "Python output: ${{ steps.python_demo.outputs.output_path }}"
-          echo "Python explanation: ${{ steps.python_demo.outputs.explanation_path }}"
+          echo "Python code generated at: Output/running/luas_lingkaran.py"
+          echo "Python output: Output/running/luas_lingkaran_output.txt"
+          echo "Python explanation: Output/explanations/luas_lingkaran_explanation.md"
           
-          echo "JavaScript code generated at: ${{ steps.js_demo.outputs.code_path }}"
-          echo "JavaScript output: ${{ steps.js_demo.outputs.output_path }}"
-          echo "JavaScript explanation: ${{ steps.js_demo.outputs.explanation_path }}"
+          echo "JavaScript code generated at: Output/running/email_validator.js"
+          echo "JavaScript output: Output/running/email_validator_output.txt"
+          echo "JavaScript explanation: Output/explanations/email_validator_explanation.md"
       
       - name: Upload all outputs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cramind-outputs
           path: Output/
