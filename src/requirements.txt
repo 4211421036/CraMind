@@ -1,0 +1,4 @@
+transformers==4.30.0
+torch==1.10.0
+markdown==3.3.7
+huggingface-hub==0.14.0
