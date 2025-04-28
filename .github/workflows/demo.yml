@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Generate Python code
+      - name: Generate Python codes
         uses: ./
         id: python_demo
         with:
