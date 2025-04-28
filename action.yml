@@ -1,0 +1,45 @@
+name: 'CraMind'
+description: 'Cramming knowledge into the mind, which is fitting for AI model designed to helping generate code effieciently'
+author: 'GALIH RIDHO UTOMO'
+branding:
+  icon: 'brain'
+  color: 'purple'
+inputs:
+  description:
+    description: 'Description of what the code should do (any language)'
+    required: true
+  language:
+    description: 'Target programming language'
+    required: true
+    default: 'python'
+    options:
+      - python
+      - javascript
+      - java
+      - cpp
+      - csharp
+      - go
+      - ruby
+      - php
+      - swift
+      - kotlin
+      - rust
+      - typescript
+  filename:
+    description: 'Name for the generated file (without extension)'
+    required: false
+    default: 'generated_code'
+  explain:
+    description: 'Generate explanation of the code'
+    required: false
+    default: 'true'
+outputs:
+  code_path:
+    description: 'Path to the generated code'
+  output_path:
+    description: 'Path to the execution output'
+  explanation_path:
+    description: 'Path to the code explanation'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
