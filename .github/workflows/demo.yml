@@ -1,0 +1,41 @@
+name: CraMind Demo
+
+on: [push]
+
+jobs:
+  generate-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Generate Python code
+        uses: ./
+        id: python_demo
+        with:
+          description: 'Create a Python program to calculate the area of a circle'
+          language: 'python'
+          filename: 'area_circle'
+      
+      - name: Generate JavaScript code
+        uses: ./
+        id: js_demo
+        with:
+          description: 'Create a JavaScript function to validate email addresses'
+          language: 'javascript'
+          filename: 'email_validator'
+      
+      - name: Show results
+        run: |
+          echo "Python code generated at: ${{ steps.python_demo.outputs.code_path }}"
+          echo "Python output: ${{ steps.python_demo.outputs.output_path }}"
+          echo "Python explanation: ${{ steps.python_demo.outputs.explanation_path }}"
+          
+          echo "JavaScript code generated at: ${{ steps.js_demo.outputs.code_path }}"
+          echo "JavaScript output: ${{ steps.js_demo.outputs.output_path }}"
+          echo "JavaScript explanation: ${{ steps.js_demo.outputs.explanation_path }}"
+      
+      - name: Upload all outputs
+        uses: actions/upload-artifact@v3
+        with:
+          name: cramind-outputs
+          path: Output/
