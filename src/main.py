@@ -88,34 +88,51 @@ def execute_code(code, language_config, filename):
         return str(error_path), None, str(e)
 
 def generate_explanation(code, language, model, tokenizer):
-    prompt = f"""
-    Explain this {language} code in a way that helps beginners understand:
-    
-    {code}
-    
-    Provide the explanation in the following format:
-    1. Overall purpose of the code
-    2. Breakdown of each major section
-    3. Key concepts used
-    4. Example of how to modify or extend it
-    
-    Explanation:
-    """
-    
-    inputs = tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=512)
-    
-    outputs = model.generate(
-        inputs,
-        max_new_tokens=512,
-        temperature=0.5,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id,
-        attention_mask=inputs.ne(tokenizer.pad_token_id)
-    
-    explanation = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    explanation = explanation.replace(prompt, "").strip()
-    
-    return explanation
+    try:
+        prompt = f"""
+        Explain this {language} code in a way that helps beginners understand:
+        
+        {code}
+        
+        Provide the explanation in the following format:
+        1. Overall purpose of the code
+        2. Breakdown of each major section
+        3. Key concepts used
+        4. Example of how to modify or extend it
+        
+        Explanation:
+        """
+        
+        # Encode input dengan pemangkasan
+        inputs = tokenizer.encode(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
+        
+        # Generate explanation dengan konfigurasi yang tepat
+        outputs = model.generate(
+            inputs,
+            max_new_tokens=512,
+            temperature=0.5,
+            do_sample=True,
+            pad_token_id=tokenizer.eos_token_id,
+            attention_mask=inputs.ne(tokenizer.pad_token_id),
+            early_stopping=True
+        )
+        
+        # Decode dan bersihkan output
+        explanation = tokenizer.decode(
+            outputs[0],
+            skip_special_tokens=True
+        ).replace(prompt, "").strip()
+        
+        return explanation
+        
+    except Exception as e:
+        print(f"Error generating explanation: {str(e)}")
+        return f"Could not generate explanation due to error: {str(e)}"
 
 def save_explanation(explanation, filename, language):
     output_dir = Path("Output/explanations")  # Perbaikan typo: explantions -> explanations
