@@ -9,7 +9,8 @@ import markdown
 
 def load_model():
     model_name = "Salesforce/codegen-350M-mono"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
+    tokenizer.pad_token = tokenizer.eos_token  # Set pad token
     model = AutoModelForCausalLM.from_pretrained(model_name)
     return model, tokenizer
 
@@ -26,30 +27,34 @@ def generate_code(model, tokenizer, description, language):
     Here's the {language} code:
     """
     
-    inputs = tokenizer.encode(prompt, return_tensors="pt")
-    outputs = model.generate(inputs, max_length=1024, temperature=0.7)
-    code = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    inputs = tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=512)
     
-    # Clean up the generated code
+    # Generate with better configuration
+    outputs = model.generate(
+        inputs,
+        max_new_tokens=512,  # Gunakan max_new_tokens bukan max_length
+        temperature=0.7,
+        do_sample=True,     # Diperlukan untuk temperature
+        pad_token_id=tokenizer.eos_token_id,
+        attention_mask=inputs.ne(tokenizer.pad_token_id)  # Tambahkan attention mask
+    )
+    
+    code = tokenizer.decode(outputs[0], skip_special_tokens=True)
     code = code.replace(prompt, "").strip()
     return code
 
 def execute_code(code, language_config, filename):
     try:
-        # Create output directory
         output_dir = Path("Output/running")
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save code to file
         file_path = output_dir / f"{filename}.{language_config['extension']}"
         with open(file_path, "w") as f:
             f.write(code)
         
-        # Prepare run command
         run_cmd = [part.format(file=str(file_path), filename=filename) 
                   for part in language_config['run_command']]
         
-        # Execute code
         result = subprocess.run(
             " ".join(run_cmd),
             shell=True,
@@ -59,7 +64,6 @@ def execute_code(code, language_config, filename):
             cwd=str(output_dir)
         )
         
-        # Save output
         output_path = output_dir / f"{filename}_output.txt"
         with open(output_path, "w") as f:
             f.write(f"Execution at {datetime.now()}\n\n")
@@ -98,61 +102,60 @@ def generate_explanation(code, language, model, tokenizer):
     Explanation:
     """
     
-    inputs = tokenizer.encode(prompt, return_tensors="pt")
-    outputs = model.generate(inputs, max_length=1024, temperature=0.5)
+    inputs = tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=512)
+    
+    outputs = model.generate(
+        inputs,
+        max_new_tokens=512,
+        temperature=0.5,
+        do_sample=True,
+        pad_token_id=tokenizer.eos_token_id,
+        attention_mask=inputs.ne(tokenizer.pad_token_id)
+    
     explanation = tokenizer.decode(outputs[0], skip_special_tokens=True)
     explanation = explanation.replace(prompt, "").strip()
     
     return explanation
 
 def save_explanation(explanation, filename, language):
-    output_dir = Path("Output/explanations")
+    output_dir = Path("Output/explanations")  # Perbaikan typo: explantions -> explanations
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save as Markdown
     explanation_path = output_dir / f"{filename}_explanation.md"
     with open(explanation_path, "w") as f:
         f.write(f"# Code Explanation: {filename}.{language}\n\n")
         f.write(explanation)
     
-    # Convert to HTML for better display
     html_path = output_dir / f"{filename}_explanation.html"
     with open(html_path, "w") as f:
         html = markdown.markdown(explanation)
-        f.write(f"<html><body>{html}</body></html>")
+        f.write(f"<html><body><h1>CraMind Explanation</h1>{html}</body></html>")
     
     return str(explanation_path)
 
 def main():
-    # Get inputs
     description = os.getenv("INPUT_DESCRIPTION")
     language = os.getenv("INPUT_LANGUAGE", "python")
     filename = os.getenv("INPUT_FILENAME", "generated_code")
     generate_explanation_flag = os.getenv("INPUT_EXPLAIN", "true").lower() == "true"
     
-    # Load model and language config
     model, tokenizer = load_model()
     language_config = get_language_config(language)
     
-    # Generate code
     code = generate_code(model, tokenizer, description, language)
     
-    # Execute code and save output
     output_path, execution_output, error = execute_code(code, language_config, filename)
     
-    # Generate explanation if requested
     explanation_path = None
     if generate_explanation_flag:
         explanation = generate_explanation(code, language, model, tokenizer)
         explanation_path = save_explanation(explanation, filename, language_config['extension'])
     
-    # Set outputs
     print(f"::set-output name=code_path::Output/running/{filename}.{language_config['extension']}")
     print(f"::set-output name=output_path::{output_path}")
     if explanation_path:
         print(f"::set-output name=explanation_path::{explanation_path}")
     
-    # Exit with error if execution failed
     if error:
         sys.exit(1)
 
